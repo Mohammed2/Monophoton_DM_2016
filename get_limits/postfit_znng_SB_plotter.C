@@ -1,0 +1,764 @@
+#include <fstream>
+#include <vector>
+#include <iomanip>
+#include "TFile.h"
+#include "TH2.h"
+#include "TH2F.h"
+#include "TGraph2D.h"
+#include "TStyle.h"
+#include "TCanvas.h"
+#include "TMath.h"
+#include "TString.h"
+#include "THStack.h"
+#include "TPaveText.h"
+#include "TLegend.h"
+#include "TColor.h"
+#include "boost/format.hpp"
+
+void plot(Double_t leg_xoffset, Double_t leg_yoffset, TString xaxis_title, TString plotname)
+{
+  std::vector<TH1F*> histo_vector;
+  histo_vector.clear();
+  
+  double total_background = 0.0;
+  
+  TCanvas *c = new TCanvas("c", "canvas",700,640);
+  gStyle->SetOptStat(0);
+  gStyle->SetPadTickX(1);
+  gStyle->SetPadTickY(1);
+  c->SetFillColor(0);
+  c->SetBorderMode(0);
+  c->SetBorderSize(2);
+  float t_m = 0.08; //top margin
+  float b_m = 0.4; //botton margin
+  float l_m = 0.09; //left margin
+  float r_m = 0.05; //right margin
+  c->SetTopMargin(t_m);
+  c->SetBottomMargin(b_m);
+  c->SetLeftMargin(l_m);
+  c->SetRightMargin(r_m);
+  c->SetFrameFillStyle(0);
+  c->SetFrameBorderMode(0);
+  c->SetFrameFillStyle(0);
+  c->SetFrameBorderMode(0);
+  c->cd();
+  
+  TFile *f_postfit_shapes = new TFile("fitDiagnostics.root");
+  TGraphAsymmErrors* tgae_data = (TGraphAsymmErrors*)((TGraphAsymmErrors*)f_postfit_shapes->Get("shapes_fit_b/SB/data"))->Clone("tgae_data");
+  TGraphAsymmErrors* tgae_data_SB = (TGraphAsymmErrors*)((TGraphAsymmErrors*)f_postfit_shapes->Get("shapes_fit_b/SB/data"))->Clone("tgae_data_SB");
+  Float_t PtBins[7]={175.,200.,250., 300., 400., 600., 1000.0};
+  TH1F* histo_data = new TH1F("data","data",6,PtBins);
+  TH1F* histo_data_SB = new TH1F("data_SB","data_SB",6,PtBins);
+  const int nBins = histo_data->GetXaxis()->GetNbins();
+  for(int i = 1; i <= nBins; i++){
+    Double_t x = 0.0;
+    Double_t y = 0.0;
+    tgae_data->GetPoint(i-1, x, y);
+    histo_data->SetBinContent(i, y*histo_data->GetBinWidth(i));
+    histo_data->SetBinError(i, tgae_data->GetErrorY(i-1)*histo_data->GetBinWidth(i));
+    cout<<"data_SA_bin "<<i<<": y="<<y<<endl;
+    tgae_data_SB->GetPoint(i-1, x, y);
+    histo_data_SB->SetBinContent(i, y*histo_data_SB->GetBinWidth(i));
+    histo_data_SB->SetBinError(i, tgae_data_SB->GetErrorY(i-1)*histo_data_SB->GetBinWidth(i));
+    cout<<"data_SB_bin "<<i<<": y="<<y<<endl;
+  }
+  cout<<"histo_data_SA_integral: "<<(histo_data->Integral())<<endl;
+  cout<<"histo_data_SB_integral: "<<(histo_data_SB->Integral())<<endl;
+  // histo_data->Add(histo_data_SB);
+  Float_t int_data = histo_data->Integral();
+  histo_data->SetLineWidth(3);
+  histo_data->SetLineColor(kWhite);
+  histo_data->SetMarkerStyle(kFullSquare);
+  histo_data->SetMarkerColor(kWhite);
+  histo_vector.push_back(histo_data);
+    
+  TH1F* histo_jetfake = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/QCD"))->Clone("histo_jetfake");
+  TH1F* histo_jetfake_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/QCD"))->Clone("histo_jetfake_SB");
+  // histo_jetfake->Add(histo_jetfake_SB);
+  // histo bin contents have been divided by bin width, so restore true normalization by multiplying by bin width
+  for(int i = 1; i <= nBins; i++){
+    histo_jetfake->SetBinContent(i, histo_jetfake->GetBinContent(i)*histo_jetfake->GetBinWidth(i));
+    histo_jetfake->SetBinError(i, histo_jetfake->GetBinError(i)*histo_jetfake->GetBinWidth(i));
+    cout<<"jetfake_bin_"<<i<<": error="<<histo_jetfake->GetBinError(i)<<endl;
+  }
+  Float_t int_jetfake = histo_jetfake->Integral();
+  total_background += int_jetfake;
+  histo_jetfake->SetFillColor(kBlue-4);
+  histo_vector.push_back(histo_jetfake);
+  
+  TH1F* histo_spikes = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/Spikes"))->Clone("histo_spikes");
+  TH1F* histo_spikes_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/Spikes"))->Clone("histo_spikes_SB");
+  // histo_spikes->Add(histo_spikes_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_spikes->SetBinContent(i, histo_spikes->GetBinContent(i)*histo_spikes->GetBinWidth(i));
+    histo_spikes->SetBinError(i, histo_spikes->GetBinError(i)*histo_spikes->GetBinWidth(i));
+    cout<<"spikes_bin_"<<i<<": error="<<histo_spikes->GetBinError(i)<<endl;
+  }
+  Float_t int_spikes = histo_spikes->Integral();
+  total_background += int_spikes;
+  histo_spikes->SetFillColor(kGray);
+  histo_vector.push_back(histo_spikes);
+  
+  TH1F* histo_elefake = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/Elefake"))->Clone("histo_elefake");
+  TH1F* histo_elefake_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/Elefake"))->Clone("histo_elefake_SB");
+  // histo_elefake->Add(histo_elefake_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_elefake->SetBinContent(i, histo_elefake->GetBinContent(i)*histo_elefake->GetBinWidth(i));
+    histo_elefake->SetBinError(i, histo_elefake->GetBinError(i)*histo_elefake->GetBinWidth(i));
+    cout<<"elefake_bin_"<<i<<": error="<<histo_elefake->GetBinError(i)<<endl;
+  }
+  Float_t int_elefake = histo_elefake->Integral();
+  total_background += int_elefake;
+  histo_elefake->SetFillColor(kYellow);
+  histo_vector.push_back(histo_elefake);
+  
+  TH1F* histo_bhalo = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/BHalo"))->Clone("histo_bhalo");
+  TH1F* histo_bhalo_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/BHalo"))->Clone("histo_bhalo_SB");
+  // histo_bhalo->Add(histo_bhalo_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_bhalo->SetBinContent(i, histo_bhalo->GetBinContent(i)*histo_bhalo->GetBinWidth(i));
+    // histo_bhalo->SetBinError(i, histo_bhalo->GetBinError(i)*histo_bhalo->GetBinWidth(i));
+    histo_bhalo->SetBinError(i, histo_bhalo->GetBinContent(i));
+    cout<<"bhalo_bin_"<<i<<": error="<<histo_bhalo->GetBinError(i)<<endl;
+  }
+  Float_t int_bhalo = histo_bhalo->Integral();
+  total_background += int_bhalo;
+  histo_bhalo->SetFillColor(12);
+  histo_vector.push_back(histo_bhalo);
+  
+  TH1F* histo_ZNuNuG = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/ZnunuG"))->Clone("histo_ZNuNuG");
+  TH1F* histo_ZNuNuG_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/ZnunuG"))->Clone("histo_ZNuNuG_SB");
+  // histo_ZNuNuG->Add(histo_ZNuNuG_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_ZNuNuG->SetBinContent(i, histo_ZNuNuG->GetBinContent(i)*histo_ZNuNuG->GetBinWidth(i));
+    histo_ZNuNuG->SetBinError(i, histo_ZNuNuG->GetBinError(i)*histo_ZNuNuG->GetBinWidth(i));
+    cout<<"ZNuNuG_bin_"<<i<<": error="<<histo_ZNuNuG->GetBinError(i)<<endl;
+  }
+  Float_t int_ZNuNuG = histo_ZNuNuG->Integral();
+  total_background += int_ZNuNuG;
+  histo_ZNuNuG->SetFillColor(kSpring-9);
+  histo_vector.push_back(histo_ZNuNuG);
+  
+  TH1F* histo_WG = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WG"))->Clone("histo_WG");
+  TH1F* histo_WG_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WG"))->Clone("histo_WG_SB");
+  // histo_WG->Add(histo_WG_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_WG->SetBinContent(i, histo_WG->GetBinContent(i)*histo_WG->GetBinWidth(i));
+    histo_WG->SetBinError(i, histo_WG->GetBinError(i)*histo_WG->GetBinWidth(i));
+    cout<<"WG_bin_"<<i<<": error="<<histo_WG->GetBinError(i)<<endl;
+  }
+  Float_t int_WG = histo_WG->Integral();
+  total_background += int_WG;
+  histo_WG->SetFillColor(kAzure+10);
+  histo_vector.push_back(histo_WG);
+  
+  TH1F* histo_GJets_40toInf = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/GJets"))->Clone("histo_GJets_40toInf");
+  TH1F* histo_GJets_40toInf_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/GJets"))->Clone("histo_GJets_40toInf_SB");
+  // histo_GJets_40toInf->Add(histo_GJets_40toInf_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_GJets_40toInf->SetBinContent(i, histo_GJets_40toInf->GetBinContent(i)*histo_GJets_40toInf->GetBinWidth(i));
+    histo_GJets_40toInf->SetBinError(i, histo_GJets_40toInf->GetBinError(i)*histo_GJets_40toInf->GetBinWidth(i));
+    cout<<"GJets_40toInf_bin_"<<i<<": error="<<histo_GJets_40toInf->GetBinError(i)<<endl;
+  }
+  Float_t int_GJets_40toInf = histo_GJets_40toInf->Integral();
+  total_background += int_GJets_40toInf;
+  histo_GJets_40toInf->SetFillColor(kRed-10);
+  histo_vector.push_back(histo_GJets_40toInf);
+  
+  TH1F* histo_ZllG_combined = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/ZllG_MC"))->Clone("histo_ZllG_combined");
+  TH1F* histo_ZllG_combined_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/ZllG_MC"))->Clone("histo_ZllG_combined_SB");
+  // histo_ZllG_combined->Add(histo_ZllG_combined_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_ZllG_combined->SetBinContent(i, histo_ZllG_combined->GetBinContent(i)*histo_ZllG_combined->GetBinWidth(i));
+    histo_ZllG_combined->SetBinError(i, histo_ZllG_combined->GetBinError(i)*histo_ZllG_combined->GetBinWidth(i));
+    cout<<"ZllG_combined_bin_"<<i<<": error="<<histo_ZllG_combined->GetBinError(i)<<endl;
+  }
+  Float_t int_ZllG_combined = histo_ZllG_combined->Integral();
+  total_background += int_ZllG_combined;
+  histo_ZllG_combined->SetFillColor(kViolet);
+  histo_vector.push_back(histo_ZllG_combined);
+  
+  TH1F* histo_TTG = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/TTG"))->Clone("histo_TTG");
+  TH1F* histo_TTG_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/TTG"))->Clone("histo_TTG_SB");
+  // histo_TTG->Add(histo_TTG_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_TTG->SetBinContent(i, histo_TTG->GetBinContent(i)*histo_TTG->GetBinWidth(i));
+    histo_TTG->SetBinError(i, histo_TTG->GetBinError(i)*histo_TTG->GetBinWidth(i));
+    cout<<"TTG_bin_"<<i<<": error="<<histo_TTG->GetBinError(i)<<endl;
+  }
+  Float_t int_TTG = histo_TTG->Integral();
+  total_background += int_TTG;
+  histo_TTG->SetFillColor(kOrange-3);
+  histo_vector.push_back(histo_TTG);
+  
+  TH1F* histo_TG = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/TG"))->Clone("histo_TG");
+  TH1F* histo_TG_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/TG"))->Clone("histo_TG_SB");
+  // histo_TG->Add(histo_TG_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_TG->SetBinContent(i, histo_TG->GetBinContent(i)*histo_TG->GetBinWidth(i));
+    histo_TG->SetBinError(i, histo_TG->GetBinError(i)*histo_TG->GetBinWidth(i));
+    cout<<"TG_bin_"<<i<<": error="<<histo_TG->GetBinError(i)<<endl;
+  }
+  Float_t int_TG = histo_TG->Integral();
+  total_background += int_TG;
+  histo_TG->SetFillColor(kOrange-3);
+  histo_vector.push_back(histo_TG);
+  
+  TH1F* histo_diphoton = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/Diphoton"))->Clone("histo_diphoton");
+  TH1F* histo_diphoton_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/Diphoton"))->Clone("histo_diphoton_SB");
+  // histo_diphoton->Add(histo_diphoton_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_diphoton->SetBinContent(i, histo_diphoton->GetBinContent(i)*histo_diphoton->GetBinWidth(i));
+    histo_diphoton->SetBinError(i, histo_diphoton->GetBinError(i)*histo_diphoton->GetBinWidth(i));
+    cout<<"diphoton_bin_"<<i<<": error="<<histo_diphoton->GetBinError(i)<<endl;
+  }
+  Float_t int_diphoton = histo_diphoton->Integral();
+  total_background += int_diphoton;
+  histo_diphoton->SetFillColor(kRed-5);
+  histo_vector.push_back(histo_diphoton);
+  
+  TH1F* histo_WZ = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WZ"))->Clone("histo_WZ");
+  TH1F* histo_WZ_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WZ"))->Clone("histo_WZ_SB");
+  // histo_WZ->Add(histo_WZ_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_WZ->SetBinContent(i, histo_WZ->GetBinContent(i)*histo_WZ->GetBinWidth(i));
+    histo_WZ->SetBinError(i, histo_WZ->GetBinError(i)*histo_WZ->GetBinWidth(i));
+    cout<<"WZ_bin_"<<i<<": error="<<histo_WZ->GetBinError(i)<<endl;
+  }
+  Float_t int_WZ = histo_WZ->Integral();
+  total_background += int_WZ;
+  histo_WZ->SetFillColor(kViolet);
+  histo_vector.push_back(histo_WZ);
+  
+  TH1F* histo_ZZ = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/ZZ"))->Clone("histo_ZZ");
+  TH1F* histo_ZZ_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/ZZ"))->Clone("histo_ZZ_SB");
+  // histo_ZZ->Add(histo_ZZ_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_ZZ->SetBinContent(i, histo_ZZ->GetBinContent(i)*histo_ZZ->GetBinWidth(i));
+    histo_ZZ->SetBinError(i, histo_ZZ->GetBinError(i)*histo_ZZ->GetBinWidth(i));
+    cout<<"ZZ_bin_"<<i<<": error="<<histo_ZZ->GetBinError(i)<<endl;
+  }
+  Float_t int_ZZ = histo_ZZ->Integral();
+  total_background += int_ZZ;
+  histo_ZZ->SetFillColor(kViolet);
+  histo_vector.push_back(histo_ZZ);
+  
+  TH1F* histo_WMuNu = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WMuNu"))->Clone("histo_WMuNu");
+  TH1F* histo_WMuNu_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WMuNu"))->Clone("histo_WMuNu_SB");
+  // histo_WMuNu->Add(histo_WMuNu_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_WMuNu->SetBinContent(i, histo_WMuNu->GetBinContent(i)*histo_WMuNu->GetBinWidth(i));
+    histo_WMuNu->SetBinError(i, histo_WMuNu->GetBinError(i)*histo_WMuNu->GetBinWidth(i));
+    cout<<"WMuNu_bin_"<<i<<": error="<<histo_WMuNu->GetBinError(i)<<endl;
+  }
+  Float_t int_WMuNu = histo_WMuNu->Integral();
+  total_background += int_WMuNu;
+  histo_WMuNu->SetFillColor(kGreen+2);
+  histo_vector.push_back(histo_WMuNu);
+  
+  TH1F* histo_WTauNu = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WTauNu"))->Clone("histo_WTauNu");
+  TH1F* histo_WTauNu_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WTauNu"))->Clone("histo_WTauNu_SB");
+  // histo_WTauNu->Add(histo_WTauNu_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_WTauNu->SetBinContent(i, histo_WTauNu->GetBinContent(i)*histo_WTauNu->GetBinWidth(i));
+    histo_WTauNu->SetBinError(i, histo_WTauNu->GetBinError(i)*histo_WTauNu->GetBinWidth(i));
+    cout<<"WTauNu_bin_"<<i<<": error="<<histo_WTauNu->GetBinError(i)<<endl;
+  }
+  Float_t int_WTauNu = histo_WTauNu->Integral();
+  total_background += int_WTauNu;
+  histo_WTauNu->SetFillColor(kGreen+2);
+  histo_vector.push_back(histo_WTauNu);
+  
+  TH1F* histo_WW = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WW"))->Clone("histo_WW");
+  TH1F* histo_WW_SB = (TH1F*)((TH1F*)f_postfit_shapes->Get("shapes_fit_b/SB/WW"))->Clone("histo_WW_SB");
+  // histo_WW->Add(histo_WW_SB);
+  for(int i = 1; i <= nBins; i++){
+    histo_WW->SetBinContent(i, histo_WW->GetBinContent(i)*histo_WW->GetBinWidth(i));
+    histo_WW->SetBinError(i, histo_WW->GetBinError(i)*histo_WW->GetBinWidth(i));
+    cout<<"WW_bin_"<<i<<": error="<<histo_WW->GetBinError(i)<<endl;
+  }
+  Float_t int_WW = histo_WW->Integral();
+  total_background += int_WW;
+  histo_WW->SetFillColor(kViolet);
+  histo_vector.push_back(histo_WW);
+  
+
+  vector<float> total_background_binned;
+  total_background_binned.clear();
+  for(int i = 1; i <= nBins; i ++){
+    total_background_binned.push_back(0.0);
+  }
+  
+  cout<<"$E_{T}^{\\gamma}$ &        [ 175,  200] &        [ 200,  250] &        [ 250,  300] &        [ 300,  400] &        [ 400,  600] &        [ $\\geq$600] \\\\"<<endl;
+  
+  cout<<"\\hline"<<endl;
+  
+  cout<<"        jetfake ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_jetfake->GetBinContent(i)<<" \\pm"<<boost::format("%.2f")%histo_jetfake->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_jetfake->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"         spikes ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_spikes->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_spikes->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_spikes->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"        elefake ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_elefake->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_elefake->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_elefake->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"          bhalo ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_bhalo->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_bhalo->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_bhalo->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"         ZNuNuG ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_ZNuNuG->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_ZNuNuG->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_ZNuNuG->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"             WG ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_WG->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_WG->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_WG->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"          GJets ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_GJets_40toInf->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_GJets_40toInf->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_GJets_40toInf->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"           ZllG ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_ZllG_combined->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_ZllG_combined->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_ZllG_combined->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"            TTG ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_TTG->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_TTG->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_TTG->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"             TG ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_TG->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_TG->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_TG->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"        diphton ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_diphoton->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_diphoton->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_diphoton->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"             WZ ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_WZ->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_WZ->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_WZ->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"             ZZ ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_ZZ->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_ZZ->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_ZZ->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"          WMuNu ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_WMuNu->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_WMuNu->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_WMuNu->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"         WTauNu ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_WTauNu->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_WTauNu->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_WTauNu->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  cout<<"             WW ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%histo_WW->GetBinContent(i)<<" \\pm "<<boost::format("%.2f")%histo_WW->GetBinError(i)<<" $ ";
+    total_background_binned[i-1] += histo_WW->GetBinContent(i);
+  }
+  cout<<"\\\\"<<endl;
+  
+  cout<<"\\hline"<<endl;
+  
+  cout<<"          total ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<boost::format("%.2f")%total_background_binned[i-1]<<" $ ";
+  }
+  cout<<"\\\\"<<endl;
+  
+  cout<<"\\hline"<<endl;
+  
+  cout<<"           data ";
+  for(int i = 1; i <= nBins; i++){
+    cout<<"& $ "<<histo_data->GetBinContent(i)<<" $ ";
+  }
+  cout<<"\\\\"<<endl;
+  
+  cout<<"\\hline"<<endl;
+    
+  for(int i = 1; i <= nBins; i++){
+    double binWidth = histo_data->GetBinWidth(i);
+    histo_data->SetBinContent(i,histo_data->GetBinContent(i)/binWidth);
+    histo_data->SetBinError(i,histo_data->GetBinError(i)/binWidth);
+    histo_jetfake->SetBinContent(i,histo_jetfake->GetBinContent(i)/binWidth);
+    histo_jetfake->SetBinError(i,histo_jetfake->GetBinError(i)/binWidth);
+    histo_spikes->SetBinContent(i,histo_spikes->GetBinContent(i)/binWidth);
+    histo_spikes->SetBinError(i,histo_spikes->GetBinError(i)/binWidth);
+    histo_elefake->SetBinContent(i,histo_elefake->GetBinContent(i)/binWidth);
+    histo_elefake->SetBinError(i,histo_elefake->GetBinError(i)/binWidth);
+    histo_bhalo->SetBinContent(i,histo_bhalo->GetBinContent(i)/binWidth);
+    histo_bhalo->SetBinError(i,histo_bhalo->GetBinError(i)/binWidth);
+    histo_ZNuNuG->SetBinContent(i,histo_ZNuNuG->GetBinContent(i)/binWidth);
+    histo_ZNuNuG->SetBinError(i,histo_ZNuNuG->GetBinError(i)/binWidth);
+    histo_WG->SetBinContent(i,histo_WG->GetBinContent(i)/binWidth);
+    histo_WG->SetBinError(i,histo_WG->GetBinError(i)/binWidth);
+    histo_GJets_40toInf->SetBinContent(i,histo_GJets_40toInf->GetBinContent(i)/binWidth);
+    histo_GJets_40toInf->SetBinError(i,histo_GJets_40toInf->GetBinError(i)/binWidth);
+    histo_ZllG_combined->SetBinContent(i,histo_ZllG_combined->GetBinContent(i)/binWidth);
+    histo_ZllG_combined->SetBinError(i,histo_ZllG_combined->GetBinError(i)/binWidth);
+    histo_TTG->SetBinContent(i,histo_TTG->GetBinContent(i)/binWidth);
+    histo_TTG->SetBinError(i,histo_TTG->GetBinError(i)/binWidth);
+    histo_TG->SetBinContent(i,histo_TG->GetBinContent(i)/binWidth);
+    histo_TG->SetBinError(i,histo_TG->GetBinError(i)/binWidth);
+    histo_diphoton->SetBinContent(i,histo_diphoton->GetBinContent(i)/binWidth);
+    histo_diphoton->SetBinError(i,histo_diphoton->GetBinError(i)/binWidth);
+    histo_WZ->SetBinContent(i,histo_WZ->GetBinContent(i)/binWidth);
+    histo_WZ->SetBinError(i,histo_WZ->GetBinError(i)/binWidth);
+    histo_ZZ->SetBinContent(i,histo_ZZ->GetBinContent(i)/binWidth);
+    histo_ZZ->SetBinError(i,histo_ZZ->GetBinError(i)/binWidth);
+    histo_WMuNu->SetBinContent(i,histo_WMuNu->GetBinContent(i)/binWidth);
+    histo_WMuNu->SetBinError(i,histo_WMuNu->GetBinError(i)/binWidth);
+    histo_WTauNu->SetBinContent(i,histo_WTauNu->GetBinContent(i)/binWidth);
+    histo_WTauNu->SetBinError(i,histo_WTauNu->GetBinError(i)/binWidth);
+    histo_WW->SetBinContent(i,histo_WW->GetBinContent(i)/binWidth);
+    histo_WW->SetBinError(i,histo_WW->GetBinError(i)/binWidth);
+  }
+
+  TPad *pad1 = new TPad("pad1","pad1",0.01,0.26,0.99,0.99);
+  pad1->Draw(); pad1->cd();
+  pad1->SetFillColor(0); pad1->SetFrameBorderMode(0); pad1->SetBorderMode(0);
+  pad1->SetBottomMargin(0.);
+  
+  TH1F *histo_allbackgrounds = (TH1F*)histo_jetfake->Clone("histo_allbackgrounds");
+  histo_allbackgrounds->Add(histo_spikes);
+  histo_allbackgrounds->Add(histo_elefake);
+  histo_allbackgrounds->Add(histo_bhalo);
+  histo_allbackgrounds->Add(histo_ZNuNuG);
+  histo_allbackgrounds->Add(histo_WG);
+  histo_allbackgrounds->Add(histo_GJets_40toInf);
+  histo_allbackgrounds->Add(histo_ZllG_combined);
+  histo_allbackgrounds->Add(histo_TTG);
+  histo_allbackgrounds->Add(histo_TG);
+  histo_allbackgrounds->Add(histo_diphoton);
+  histo_allbackgrounds->Add(histo_WZ);
+  histo_allbackgrounds->Add(histo_ZZ);
+  histo_allbackgrounds->Add(histo_WMuNu);
+  histo_allbackgrounds->Add(histo_WTauNu);
+  histo_allbackgrounds->Add(histo_WW);
+  for(int i = 1; i <= nBins; i++){
+    double background = histo_allbackgrounds->GetBinContent(i);
+    // Add bin errors
+    double sum_binerrors_squared = 0.0;
+    sum_binerrors_squared += pow(histo_jetfake->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_spikes->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_elefake->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_bhalo->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_ZNuNuG->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_WG->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_GJets_40toInf->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_ZllG_combined->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_TTG->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_TG->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_diphoton->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_WZ->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_ZZ->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_WMuNu->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_WTauNu->GetBinError(i),2);
+    sum_binerrors_squared += pow(histo_WW->GetBinError(i),2);
+    // sum_binerrors_squared += pow(histo_WZG->GetBinError(i),2);
+    // sum_binerrors_squared += pow(histo_WGG->GetBinError(i),2);
+    // sum_binerrors_squared += pow(histo_ZGGToNuNuGG->GetBinError(i),2);
+    double binerror = sqrt(sum_binerrors_squared); // Include just the statistical error
+    histo_allbackgrounds->SetBinError(i,binerror);
+  }
+  histo_allbackgrounds->SetFillColorAlpha(kGray+1,0.6);
+  histo_vector.push_back(histo_allbackgrounds);
+  
+  for(int i = 1; i <= nBins; i++){
+      float background = histo_allbackgrounds->GetBinContent(i);
+      float background_err = histo_allbackgrounds->GetBinError(i);
+      float binWidth = histo_allbackgrounds->GetBinWidth(i);
+      cout<<"postfit, bin "<<i<<": "<<(background*binWidth)<<" +/- "<<(background_err*binWidth)<<endl;
+  }
+  
+  TH1F *histo_allbackgrounds_outline = (TH1F*)histo_allbackgrounds->Clone("histo_allbackgrounds_outline");
+  histo_allbackgrounds_outline->SetFillColorAlpha(kWhite,0.0);
+  histo_allbackgrounds_outline->SetLineWidth(1);
+  histo_vector.push_back(histo_allbackgrounds_outline);
+ 
+  // DEBUG
+  // if(histname == "Photon_Et_range_24"){
+  //   cout<<"Jet faking photon: "<<histo_jetfake->GetBinContent(nBins)*histo_jetfake->GetBinWidth(nBins)<<" +- "<<histo_jetfake->GetBinError(nBins)*histo_jetfake->GetBinWidth(nBins)<<endl;
+  //   cout<<"Spikes: "<<histo_spikes->GetBinContent(nBins)*histo_spikes->GetBinWidth(nBins)<<" +- "<<histo_spikes->GetBinError(nBins)*histo_spikes->GetBinWidth(nBins)<<endl;
+  //   cout<<"Electron faking photon: "<<histo_elefake->GetBinContent(nBins)*histo_elefake->GetBinWidth(nBins)<<" +- "<<histo_elefake->GetBinError(nBins)*histo_elefake->GetBinWidth(nBins)<<endl;
+  //   cout<<"Beam halo: "<<histo_bhalo->GetBinContent(nBins)*histo_bhalo->GetBinWidth(nBins)<<" +- "<<histo_bhalo->GetBinError(nBins)*histo_bhalo->GetBinWidth(nBins)<<endl;
+  //   cout<<"ZNuNu+gamma: "<<histo_ZNuNuG->GetBinContent(nBins)*histo_ZNuNuG->GetBinWidth(nBins)<<" +- "<<histo_ZNuNuG->GetBinError(nBins)*histo_ZNuNuG->GetBinWidth(nBins)<<endl;
+  //   cout<<"W+gamma: "<<histo_WG->GetBinContent(nBins)*histo_WG->GetBinWidth(nBins)<<" +- "<<histo_WG->GetBinError(nBins)*histo_WG->GetBinWidth(nBins)<<endl;
+  //   cout<<"GJets: "<<histo_GJets_40toInf->GetBinContent(nBins)*histo_GJets_40toInf->GetBinWidth(nBins)<<" +- "<<histo_GJets_40toInf->GetBinError(nBins)*histo_GJets_40toInf->GetBinWidth(nBins)<<endl;
+  //   cout<<"Z(ll)+Gamma: "<<histo_ZllG_combined->GetBinContent(nBins)*histo_ZllG_combined->GetBinWidth(nBins)<<" +- "<<histo_ZllG_combined->GetBinError(nBins)*histo_ZllG_combined->GetBinWidth(nBins)<<endl;
+  //   cout<<"tt+Gamma: "<<histo_TTG->GetBinContent(nBins)*histo_TTG->GetBinWidth(nBins)<<" +- "<<histo_TTG->GetBinError(nBins)*histo_TTG->GetBinWidth(nBins)<<endl;
+  //   cout<<"t+Gamma: "<<histo_TG->GetBinContent(nBins)*histo_TG->GetBinWidth(nBins)<<" +- "<<histo_TG->GetBinError(nBins)*histo_TG->GetBinWidth(nBins)<<endl;
+  //   // cout<<"WWG: "<<histo_WWG->GetBinContent(nBins)*histo_WWG->GetBinWidth(nBins)<<" +- "<<histo_WWG->GetBinError(nBins)*histo_WWG->GetBinWidth(nBins)<<endl;
+  //   cout<<"Diphoton: "<<histo_diphoton->GetBinContent(nBins)*histo_diphoton->GetBinWidth(nBins)<<" +- "<<histo_diphoton->GetBinError(nBins)*histo_diphoton->GetBinWidth(nBins)<<endl;
+  //   cout<<"WZ: "<<histo_WZ->GetBinContent(nBins)*histo_WZ->GetBinWidth(nBins)<<" +- "<<histo_WZ->GetBinError(nBins)*histo_WZ->GetBinWidth(nBins)<<endl;
+  //   cout<<"ZZ: "<<histo_ZZ->GetBinContent(nBins)*histo_ZZ->GetBinWidth(nBins)<<" +- "<<histo_ZZ->GetBinError(nBins)*histo_ZZ->GetBinWidth(nBins)<<endl;
+  //   cout<<"WMuNu: "<<histo_WMuNu->GetBinContent(nBins)*histo_WMuNu->GetBinWidth(nBins)<<" +- "<<histo_WMuNu->GetBinError(nBins)*histo_WMuNu->GetBinWidth(nBins)<<endl;
+  //   cout<<"WTauNu: "<<histo_WTauNu->GetBinContent(nBins)*histo_WTauNu->GetBinWidth(nBins)<<" +- "<<histo_WTauNu->GetBinError(nBins)*histo_WTauNu->GetBinWidth(nBins)<<endl;
+  //   cout<<"WW: "<<histo_WW->GetBinContent(nBins)*histo_WW->GetBinWidth(nBins)<<" +- "<<histo_WW->GetBinError(nBins)*histo_WW->GetBinWidth(nBins)<<endl;
+  //   // cout<<"WZG: "<<histo_WZG->GetBinContent(nBins)*histo_WZG->GetBinWidth(nBins)<<" +- "<<histo_WZG->GetBinError(nBins)*histo_WZG->GetBinWidth(nBins)<<endl;
+  //   // cout<<"WGG: "<<histo_WGG->GetBinContent(nBins)*histo_WGG->GetBinWidth(nBins)<<" +- "<<histo_WGG->GetBinError(nBins)*histo_WGG->GetBinWidth(nBins)<<endl;
+  //   // cout<<"ZGGToNuNuGG: "<<histo_ZGGToNuNuGG->GetBinContent(nBins)*histo_ZGGToNuNuGG->GetBinWidth(nBins)<<" +- "<<histo_ZGGToNuNuGG->GetBinError(nBins)*histo_ZGGToNuNuGG->GetBinWidth(nBins)<<endl;
+  //   cout<<"Total background: "<<histo_allbackgrounds->GetBinContent(nBins)*histo_allbackgrounds->GetBinWidth(nBins)<<" +- "<<histo_allbackgrounds->GetBinError(nBins)*histo_allbackgrounds->GetBinWidth(nBins)<<endl;
+  // }
+    
+  histo_WMuNu->Add(histo_WTauNu);
+  histo_WZ->Add(histo_ZllG_combined);
+  histo_WZ->Add(histo_ZZ);
+  histo_WZ->Add(histo_WW);
+  histo_TTG->Add(histo_TG);
+    
+  THStack *stackHisto = new THStack("stackHisto","Title");
+  stackHisto->Add(histo_bhalo);
+  stackHisto->Add(histo_spikes);
+  stackHisto->Add(histo_WZ);
+  stackHisto->Add(histo_TTG);
+  stackHisto->Add(histo_diphoton);
+  stackHisto->Add(histo_WMuNu);
+  stackHisto->Add(histo_GJets_40toInf);
+  stackHisto->Add(histo_jetfake);
+  stackHisto->Add(histo_elefake);
+  stackHisto->Add(histo_WG);
+  stackHisto->Add(histo_ZNuNuG);
+  stackHisto->SetTitle("");
+  
+  for(int i = 0; i < int(histo_vector.size()); i++){
+    histo_vector[i]->SetStats(0);
+    histo_vector[i]->SetTitle("");
+    histo_vector[i]->SetLineColor(kBlack);
+    histo_vector[i]->GetXaxis()->SetTitle(xaxis_title);
+    histo_vector[i]->GetXaxis()->SetLabelFont(42);
+    histo_vector[i]->GetXaxis()->SetLabelSize(0.06);
+    histo_vector[i]->GetXaxis()->SetTitleFont(42);
+    histo_vector[i]->GetXaxis()->SetTitleSize(0.06);
+    histo_vector[i]->GetYaxis()->SetTitle("Events / bin");
+    histo_vector[i]->GetYaxis()->SetTitle("Events / GeV");
+    histo_vector[i]->GetYaxis()->SetLabelFont(42);
+    histo_vector[i]->GetYaxis()->SetLabelSize(0.06);
+    histo_vector[i]->GetYaxis()->SetTitleFont(42);
+    histo_vector[i]->GetYaxis()->SetTitleSize(0.06);
+    histo_vector[i]->GetYaxis()->SetTitleOffset(0.9);
+  }
+    
+  double ymin = 0.0003;
+  double ymax = 200.0;
+  pad1->SetLogy();
+  histo_data->GetYaxis()->SetRangeUser(ymin,ymax);
+  histo_data->SetLineColor(kWhite);
+  histo_data->SetMarkerColor(kWhite);
+  histo_data->Draw();
+  stackHisto->Draw("HIST SAME");
+  histo_allbackgrounds->Draw("E2 SAME");
+  histo_allbackgrounds_outline->Draw("HIST SAME");
+  histo_data->SetLineColor(kBlack);
+  histo_data->SetMarkerColor(kBlack);
+  histo_data->Draw("E0 P0 SAME");
+  gPad->RedrawAxis();
+  
+  //Central location of leg defined to be location of leg in phoPt plot
+  TLegend* leg = new TLegend(0.45+leg_xoffset,0.46075+leg_yoffset,0.905387+leg_xoffset,0.862969+leg_yoffset,"");
+  leg->AddEntry(histo_data,"Data");
+  leg->AddEntry(histo_ZNuNuG,"Z(#nu#nu)#gamma","F");
+  leg->AddEntry(histo_WG,"W#gamma#rightarrowl#nu#gamma","F");
+  leg->AddEntry(histo_elefake,"e#rightarrow#gamma MisID","F");
+  leg->AddEntry(histo_jetfake,"jet#rightarrow#gamma MisID","F");
+  leg->AddEntry(histo_GJets_40toInf,"#gamma+jet","F");
+  leg->AddEntry(histo_WMuNu,"W(#mu,#tau+#nu)","F");
+  leg->AddEntry(histo_diphoton,"#gamma#gamma","F");
+  leg->AddEntry(histo_TTG,"tt#gamma, t#gamma","F");
+  leg->AddEntry(histo_WZ,"VV#gamma","F");
+  leg->AddEntry(histo_spikes,"Spikes","F");
+  leg->AddEntry(histo_bhalo,"Beam halo","F");
+  leg->SetNColumns(2);
+  leg->SetFillColor(kWhite);
+  leg->SetShadowColor(0);
+  leg->SetFillStyle(0);
+  leg->SetBorderSize(0);
+  leg->SetTextFont(42);
+  leg->SetTextSize(0.040);
+  leg->Draw();
+  
+  float lumiTextSize = 0.6;
+  float lumiTextOffset = 0.2;
+  float cmsTextSize = 0.75;
+  TLatex *texS = new TLatex(0.60023,0.917173,"35.9 fb^{-1} (13 TeV)");
+  texS->SetNDC();
+  texS->SetTextFont(42);
+  texS->SetTextSize(lumiTextSize*t_m);
+  texS->Draw();
+  TLatex *texS1 = new TLatex(0.13592,0.817173,"#bf{CMS} #it{Preliminary}");
+  texS1->SetNDC();
+  texS1->SetTextFont(42);
+  texS1->SetTextSize(cmsTextSize*t_m);
+  texS1->Draw();
+  
+  c->cd();
+  TPad *pad2 = new TPad("pad2","pad2",0.01,0.01,0.99,0.26);
+  pad2->Draw(); pad2->cd();
+  pad2->SetFillColor(0); pad2->SetFrameBorderMode(0); pad2->SetBorderMode(0);
+  pad2->SetTopMargin(0.0);
+  pad2->SetBottomMargin(0.35);
+  
+  double max_ratio = 2.5;
+  
+  TH1F* Ratio = (TH1F*)histo_data->Clone("Ratio");
+  TH1F* Ratio_background = (TH1F*)histo_allbackgrounds->Clone("Ratio_background");
+  for(int i = 1; i <= nBins; i++){
+    double y_data = histo_data->GetBinContent(i);
+    double y_error_data = histo_data->GetBinError(i);
+    double y_background = histo_allbackgrounds->GetBinContent(i);
+    double y_error_background = histo_allbackgrounds->GetBinError(i);
+    double Ratiocontent = 0.0;
+    double Ratioerror = max_ratio;
+    double Ratioerror_background = max_ratio;
+    if(y_background > 0.){
+      Ratiocontent = y_data/y_background;
+      Ratioerror_background = y_error_background/y_background;
+      if(y_error_data > 0.)
+        Ratioerror = y_error_data/y_background;
+    }
+    else if(y_data > 0.){
+      Ratiocontent = 3.*max_ratio;
+    }
+    Ratio->SetBinContent(i,Ratiocontent);
+    Ratio->SetBinError(i,Ratioerror);
+    Ratio_background->SetBinContent(i,1);
+    Ratio_background->SetBinError(i,Ratioerror_background);
+  }
+  
+  Ratio_background->GetYaxis()->SetRangeUser(0.0,max_ratio-0.01);
+  Ratio_background->GetYaxis()->SetTitle("Data/SM");
+  Ratio_background->GetYaxis()->CenterTitle();
+  Ratio_background->GetYaxis()->SetLabelSize(0.14);
+  Ratio_background->GetYaxis()->SetTitleSize(0.15);
+  Ratio_background->GetYaxis()->SetLabelFont(42);
+  Ratio_background->GetYaxis()->SetTitleFont(42);
+  Ratio_background->GetYaxis()->SetTitleOffset(0.30);
+  Ratio_background->GetYaxis()->SetNdivisions(305);
+  Ratio_background->GetXaxis()->SetTitle(xaxis_title);
+  Ratio_background->GetXaxis()->SetLabelSize(0.16);
+  Ratio_background->GetXaxis()->SetTitleSize(0.18);
+  Ratio_background->GetXaxis()->SetLabelFont(42);
+  Ratio_background->GetXaxis()->SetTitleFont(42);
+  Ratio_background->GetXaxis()->SetTitleOffset(0.9);
+  Ratio_background->GetXaxis()->SetTickLength(0.05);
+  Ratio_background->SetStats(0);
+  Ratio->SetMarkerStyle(0);
+  double xmin = histo_data->GetXaxis()->GetBinLowEdge(1);
+  double xmax = histo_data->GetXaxis()->GetBinUpEdge(nBins);
+  TLine* line = new TLine(xmin,1.,xmax,1.);
+  line->SetLineStyle(2);
+  line->SetLineColor(kBlack);
+  gStyle->SetLineStyleString(11,"3 12");
+  TLine* line1 = new TLine(xmin,1.5,xmax,1.5);
+  line1->SetLineStyle(11);
+  line1->SetLineColor(kBlack);
+  TLine* line2 = new TLine(xmin,2.0,xmax,2.0);
+  line2->SetLineStyle(11);
+  line2->SetLineColor(kBlack);
+  TLine* line3 = new TLine(xmin,0.5,xmax,0.5);
+  line3->SetLineStyle(11);
+  line3->SetLineColor(kBlack);
+  TLine* line4 = new TLine(xmin,2.5,xmax,2.5);
+  line4->SetLineStyle(11);
+  line4->SetLineColor(kBlack);
+  TLine* line5 = new TLine(xmin,3.0,xmax,3.0);
+  line5->SetLineStyle(11);
+  line5->SetLineColor(kBlack);
+  Ratio_background->Draw("E2");
+  line->Draw("SAME");
+  line1->Draw("SAME");
+  line2->Draw("SAME");
+  line3->Draw("SAME");
+  line4->Draw("SAME");
+  line5->Draw("SAME");
+  Ratio->Draw("E0 P0 SAME");
+
+  cout<<"ZnnG region (all phi)"<<endl;
+  cout<<"------------------------------------"<<endl;
+  cout<<"Jet faking photon: "<<int_jetfake<<endl;
+  cout<<"Spikes: "<<int_spikes<<endl;
+  cout<<"Electron faking photon: "<<int_elefake<<endl;
+  cout<<"Beam halo: "<<int_bhalo<<endl;
+  cout<<"ZNuNu+gamma: "<<int_ZNuNuG<<endl;
+  cout<<"W+gamma: "<<int_WG<<endl;
+  cout<<"GJets: "<<int_GJets_40toInf<<endl;
+  cout<<"Z(ll)+Gamma: "<<int_ZllG_combined<<endl;
+  cout<<"tt+Gamma: "<<int_TTG<<endl;
+  cout<<"t+Gamma: "<<int_TG<<endl;
+  cout<<"Diphoton: "<<int_diphoton<<endl;
+  cout<<"WZ: "<<int_WZ<<endl;
+  cout<<"ZZ: "<<int_ZZ<<endl;
+  cout<<"WMuNu: "<<int_WMuNu<<endl;
+  cout<<"WTauNu: "<<int_WTauNu<<endl;
+  cout<<"WW: "<<int_WW<<endl;
+  cout<<"Total background: "<<total_background<<endl;
+  cout<<"------------------------------------"<<endl;
+  cout<<"Data: "<<int_data<<endl;
+  cout<<"------------------------------------"<<endl;
+  cout<<endl;
+
+  string plotTitle = "postfit_znng_";
+  plotTitle += "SB_b_";
+  plotTitle += plotname;
+  c->SaveAs(TString(plotTitle+".png"));
+  c->SaveAs(TString(plotTitle+".pdf"));
+  delete(c);
+}
+
+void postfit_znng_SB_plotter()
+{
+  std::vector<Double_t> leg_xoffsets;
+  leg_xoffsets.clear();
+  std::vector<Double_t> leg_yoffsets;
+  leg_yoffsets.clear();
+  std::vector<TString> xaxis_titles;
+  xaxis_titles.clear();
+  std::vector<TString> plotnames;
+  plotnames.clear();
+
+//  leg_xoffsets.push_back(0.);
+//  leg_yoffsets.push_back(0.);
+//  xaxis_titles.push_back(TString(""));
+//  plotnames.push_back(TString(""));
+
+  leg_xoffsets.push_back(0.);
+  leg_yoffsets.push_back(0.);
+  xaxis_titles.push_back(TString("Photon #it{p}_{T} [GeV]"));
+  plotnames.push_back(TString("phoPt"));
+
+  for(int i = 0; i < plotnames.size(); i++){
+    plot(leg_xoffsets[i],leg_yoffsets[i],xaxis_titles[i],plotnames[i]);
+  }
+}
